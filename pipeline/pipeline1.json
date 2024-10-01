@@ -13,7 +13,20 @@
 					"secureOutput": false,
 					"secureInput": false
 				},
-				"userProperties": []
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "select * from dbo.watermark",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "AzureSqlTable1",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
 			},
 			{
 				"name": "ForEach1",
@@ -45,7 +58,7 @@
 								"source": {
 									"type": "AzureSqlSource",
 									"sqlReaderQuery": {
-										"value": "@concat('select * from dbo.customer1','where date2 > ',pipeline().parameters.LWM, ' and ', 'date2 <=', pipeline().parameters.HWM)",
+										"value": "@concat('select * from dbo.',item().tablename,'where date2 > ',if(equals(item().lowwatermark,null),pipeline().parameters.LWM,item().lowerwatermark), ' and ', 'date2 <=', if(equals(item().table,null),formatDateTime(utcNow(),'dd/MM/yyyy'),item().highwatermark))",
 										"type": "Expression"
 									},
 									"queryTimeout": "02:00:00",
@@ -78,7 +91,22 @@
 								"secureOutput": false,
 								"secureInput": false
 							},
-							"userProperties": []
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "@concat('select max(createdate) from' , item().TABLE_NAME)",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "AzureSqlTable1",
+									"type": "DatasetReference"
+								}
+							}
 						},
 						{
 							"name": "update lwm with max of water mark value",
@@ -106,7 +134,11 @@
 							"typeProperties": {
 								"scripts": [
 									{
-										"type": "Query"
+										"type": "Query",
+										"text": {
+											"value": "@concat('update dbo.watermark set lowerwatermark =',activity('Max of watermark from source table').output.firstRow,'higerwatermark =',formatDateTime(getFutureTime(1,'Day'),'dd/MM/yyyy')\n)",
+											"type": "Expression"
+										}
 									}
 								],
 								"scriptBlockExecutionTimeout": "02:00:00"
@@ -115,6 +147,8 @@
 						{
 							"name": "success Notification",
 							"type": "WebActivity",
+							"state": "Inactive",
+							"onInactiveMarkAs": "Succeeded",
 							"dependsOn": [
 								{
 									"activity": "update success records into audit",
@@ -150,7 +184,42 @@
 								"secureOutput": false,
 								"secureInput": false
 							},
-							"userProperties": []
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[update_audit]",
+								"storedProcedureParameters": {
+									"overall_status": {
+										"value": "Failure",
+										"type": "String"
+									},
+									"pipelinename": {
+										"value": {
+											"value": "@pipeline().Pipeline",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_count": {
+										"value": null,
+										"type": "Int32"
+									},
+									"sourcetable": {
+										"value": {
+											"value": "@item().TABLE_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_count": {
+										"value": null,
+										"type": "Int32"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "AzureSqlDatabase1",
+								"type": "LinkedServiceReference"
+							}
 						},
 						{
 							"name": "update success records into audit",
@@ -170,11 +239,54 @@
 								"secureOutput": false,
 								"secureInput": false
 							},
-							"userProperties": []
+							"userProperties": [],
+							"typeProperties": {
+								"storedProcedureName": "[dbo].[update_audit]",
+								"storedProcedureParameters": {
+									"overall_status": {
+										"value": "Sucess",
+										"type": "String"
+									},
+									"pipelinename": {
+										"value": {
+											"value": "@pipeline().Pipeline",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"source_count": {
+										"value": {
+											"value": "@activity('Copy data1').output.rowsRead",
+											"type": "Expression"
+										},
+										"type": "Int32"
+									},
+									"sourcetable": {
+										"value": {
+											"value": "@item().TABLE_NAME",
+											"type": "Expression"
+										},
+										"type": "String"
+									},
+									"target_count": {
+										"value": {
+											"value": "@activity('Copy data1').output.rowsCopied",
+											"type": "Expression"
+										},
+										"type": "Int32"
+									}
+								}
+							},
+							"linkedServiceName": {
+								"referenceName": "AzureSqlDatabase1",
+								"type": "LinkedServiceReference"
+							}
 						},
 						{
 							"name": "Failure Notification",
 							"type": "WebActivity",
+							"state": "Inactive",
+							"onInactiveMarkAs": "Succeeded",
 							"dependsOn": [
 								{
 									"activity": "update failure records into audit",
@@ -204,6 +316,11 @@
 			"HWM": {
 				"type": "string",
 				"defaultValue": "01/10/2024"
+			}
+		},
+		"variables": {
+			"Testvalue": {
+				"type": "String"
 			}
 		},
 		"annotations": [],

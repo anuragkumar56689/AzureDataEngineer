@@ -1,0 +1,30 @@
+{
+	"name": "pipeline2",
+	"properties": {
+		"activities": [
+			{
+				"name": "Set variable1",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "Testvalue",
+					"value": {
+						"value": "@formatDateTime(getFutureTime(1,'Day'),'dd/MM/yyyy')",
+						"type": "Expression"
+					}
+				}
+			}
+		],
+		"variables": {
+			"Testvalue": {
+				"type": "String"
+			}
+		},
+		"annotations": []
+	}
+}
